@@ -68,7 +68,7 @@ export default function App() {
                     }
                     return res.json()
                   }).catch(e => ({ items: [] })), 
-                  fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
+                  fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(async res => {
                     if (!res.ok) {
@@ -148,7 +148,7 @@ export default function App() {
     
     localStorage.setItem('spotify_code_verifier', codeVerifier)
     
-    const scope = 'user-read-recently-played playlist-read-private'
+    const scope = 'user-read-recently-played playlist-read-private playlist-read-collaborative'
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge_method=S256&code_challenge=${codeChallenge}`
     
     window.location.href = authUrl
