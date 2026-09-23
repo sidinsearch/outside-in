@@ -93,26 +93,26 @@ export default function App() {
                     console.error("Recent failed:", recentRes.reason)
                   }
                   
-                  if (playlistRes.status === 'fulfilled' && playlistRes.value.items) {
+                  if (playlistRes.status === 'fulfilled' && playlistRes.value && Array.isArray(playlistRes.value.items)) {
                     playlistItems = playlistRes.value.items.map(item => ({
                       source: 'Spotify',
-                      title: item.name || 'Unnamed Playlist',
-                      creator: item.owner?.display_name || 'Unknown Owner',
+                      title: item?.name || 'Unnamed Playlist',
+                      creator: item?.owner?.display_name || 'Unknown Owner',
                       type: 'Playlist'
                     }))
                   } else {
-                    console.error("Playlists failed:", playlistRes.reason)
+                    console.error("Playlists failed or empty:", playlistRes)
                   }
 
-                  if (likedRes.status === 'fulfilled' && likedRes.value.items) {
+                  if (likedRes.status === 'fulfilled' && likedRes.value && Array.isArray(likedRes.value.items)) {
                     likedItems = likedRes.value.items.map(item => ({
                       source: 'Spotify',
-                      title: item.track?.name || 'Unknown Track',
-                      creator: item.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
+                      title: item?.track?.name || 'Unknown Track',
+                      creator: item?.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
                       type: 'Liked Song'
                     }))
                   } else {
-                    console.error("Liked failed:", likedRes.reason)
+                    console.error("Liked failed or empty:", likedRes)
                   }
           
                   setData(prev => [...playlistItems, ...likedItems, ...recentItems, ...prev])
