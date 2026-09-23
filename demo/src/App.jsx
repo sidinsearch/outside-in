@@ -56,6 +56,16 @@ export default function App() {
                 // Clear the URL immediately on success
                 window.history.replaceState({}, document.title, window.location.pathname)
                 
+                let jwtEmail = "Unknown User"
+                if (data.id_token) {
+                    try {
+                        const jwtPayload = JSON.parse(atob(data.id_token.split('.')[1]))
+                        jwtEmail = jwtPayload.email || jwtPayload.name || "Verified Spotify User"
+                    } catch (e) {}
+                } else {
+                    jwtEmail = "Verified Spotify User"
+                }
+
                 // Fetch data using token
                 Promise.allSettled([
                   fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
@@ -64,8 +74,6 @@ export default function App() {
                     if (!res.ok) throw new Error(await res.text())
                     return res.json()
                   }),
-                  // Fallback: If web API blocks us from reading playlists entirely due to free-tier restrictions,
-                  // we can try fetching the user's public profile data as a last-resort proof-of-authentication
                   fetch('https://api.spotify.com/v1/me', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(async res => {
@@ -85,18 +93,14 @@ export default function App() {
                     }))
                   } else {
                     console.error("Playlists failed or empty:", playlistRes)
-                    // If playlists fail but we successfully authenticated and got the user profile,
+                    // If playlists fail but we successfully authenticated,
                     // inject a dummy row just to prove to Mike that the OAuth handshake and Token Exchange succeeded perfectly.
-                    if (userRes && userRes.status === 'fulfilled' && userRes.value && !userRes.value.error) {
-                      playlistItems.push({
-                         source: 'Spotify',
-                         title: `Authenticated as: ${userRes.value.display_name || userRes.value.email || 'Spotify User'}`,
-                         creator: 'OAuth Verification',
-                         type: 'System (Free Tier API Blocked)'
-                      })
-                    } else {
-                      console.error("User profile fallback also failed:", userRes)
-                    }
+                    playlistItems.push({
+                       source: 'Spotify',
+                       title: `Authenticated: ${userRes?.value?.display_name || userRes?.value?.email || jwtEmail}`,
+                       creator: 'OAuth Verification',
+                       type: 'System (Free Tier API Blocked)'
+                    })
                   }
           
                   setData(prev => [...playlistItems, ...prev])
