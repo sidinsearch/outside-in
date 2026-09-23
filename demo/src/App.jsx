@@ -27,7 +27,7 @@ export default function App() {
 
   // --- SPOTIFY LOGIC ---
   useEffect(() => {
-    if (SPOTIFY_CLIENT_ID !== 'YOUR_SPOTIFY_CLIENT_ID') {
+    if (spotifyClientId) {
 // Dead code removed
       
       // If there is a code in the URL, process it natively (bypassing strict SDK state checks)
