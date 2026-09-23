@@ -20,12 +20,12 @@ export type ListCandidatesResult =
   | { ok: false; outcome: "parse_failure" | "unreachable" | "rate_limited" | "challenged"; errorCode: string; message: string; report: CoverageReport };
 
 export interface ConnectorScope {
-  source: "spotify";
+  source: "spotify" | "youtube";
   accessToken: string; 
 }
 
 export interface ConnectorAdapter {
-  readonly source: "spotify";
+  readonly source: "spotify" | "youtube";
   readonly kind: "capture";
   readonly parserVersion: string;
   readonly allowedHosts: readonly string[];

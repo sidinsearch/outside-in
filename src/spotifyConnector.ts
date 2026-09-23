@@ -1,10 +1,10 @@
-import {
+import type {
     CandidateItem,
     ConnectorAdapter,
     ConnectorScope,
     CoverageReport,
     ListCandidatesResult
-  } from "./types";
+  } from "./types.js";
   
   export class SpotifyConnector implements ConnectorAdapter {
     readonly source = "spotify";
@@ -42,13 +42,17 @@ import {
       const fetchImpl = deps?.fetchImpl ?? fetch;
       
       try {
-        const response = await fetchImpl("https://api.spotify.com/v1/me/player/recently-played?limit=50", {
-          headers: {
-            "Authorization": `Bearer ${scope.accessToken}`
-          }
-        });
+        // Concurrently fetch recent tracks AND playlists
+        const [recentRes, playlistRes] = await Promise.all([
+          fetchImpl("https://api.spotify.com/v1/me/player/recently-played?limit=50", {
+            headers: { "Authorization": `Bearer ${scope.accessToken}` }
+          }),
+          fetchImpl("https://api.spotify.com/v1/me/playlists?limit=50", {
+            headers: { "Authorization": `Bearer ${scope.accessToken}` }
+          })
+        ]);
   
-        if (response.status === 401) {
+        if (recentRes.status === 401 || playlistRes.status === 401) {
           return {
             ok: false,
             outcome: "challenged",
@@ -58,7 +62,7 @@ import {
           };
         }
         
-        if (response.status === 429) {
+        if (recentRes.status === 429 || playlistRes.status === 429) {
           return {
             ok: false,
             outcome: "rate_limited",
@@ -68,19 +72,21 @@ import {
           };
         }
   
-        if (!response.ok) {
+        if (!recentRes.ok || !playlistRes.ok) {
            return {
             ok: false,
             outcome: "unreachable",
-            errorCode: `HTTP_${response.status}`,
-            message: `Spotify API returned ${response.status}`,
+            errorCode: `HTTP_ERROR`,
+            message: `Spotify API returned an error status.`,
             report: this.buildReport("unknown", null, null)
           };
         }
   
-        let data: any;
+        let recentData: any;
+        let playlistData: any;
         try {
-          data = await response.json();
+          recentData = await recentRes.json();
+          playlistData = await playlistRes.json();
         } catch (err) {
           return {
             ok: false,
@@ -91,17 +97,17 @@ import {
           };
         }
   
-        if (!data || !Array.isArray(data.items)) {
+        if (!recentData || !Array.isArray(recentData.items) || !playlistData || !Array.isArray(playlistData.items)) {
           return {
             ok: false,
             outcome: "parse_failure",
             errorCode: "INVALID_SHAPE",
-            message: "Spotify response did not contain an items array.",
+            message: "Spotify response did not contain expected items arrays.",
             report: this.buildReport("unknown", null, null)
           };
         }
   
-        if (data.items.length === 0) {
+        if (recentData.items.length === 0 && playlistData.items.length === 0) {
           return {
             ok: true,
             outcome: "empty_verified",
@@ -111,21 +117,34 @@ import {
         }
   
         const items: CandidateItem[] = [];
-        for (const item of data.items) {
+        
+        // Map Recent Tracks
+        for (const item of recentData.items) {
           const track = item.track;
           if (!track || !track.id) continue;
   
-          // Must build URL from validated ID, not copied raw
-          const url = `https://open.spotify.com/track/${encodeURIComponent(track.id)}`;
-          const author = Array.isArray(track.artists) ? track.artists.map((a: any) => a.name).join(", ") : null;
-          
           items.push({
-            external_id: track.id,
+            external_id: `track_${track.id}`,
             title: track.name || "Unknown Title",
-            author,
-            url,
+            author: Array.isArray(track.artists) ? track.artists.map((a: any) => a.name).join(", ") : null,
+            url: `https://open.spotify.com/track/${encodeURIComponent(track.id)}`,
             highlight_text: null,
             consumed_at: item.played_at || null,
+            ingest_input_type: "url"
+          });
+        }
+
+        // Map Playlists
+        for (const item of playlistData.items) {
+          if (!item || !item.id) continue;
+  
+          items.push({
+            external_id: `playlist_${item.id}`,
+            title: item.name || "Unknown Playlist",
+            author: item.owner?.display_name || null,
+            url: `https://open.spotify.com/playlist/${encodeURIComponent(item.id)}`,
+            highlight_text: null,
+            consumed_at: null, // Playlists don't have a played_at timestamp in this endpoint
             ingest_input_type: "url"
           });
         }
@@ -135,9 +154,9 @@ import {
           outcome: "success",
           items,
           report: this.buildReport(
-            data.next ? "partial" : "complete",
-            data.cursors?.after || null,
-            null // sourceAccountId requires another API call (/me) which isn't necessary for the items themselves, so left null to save a round trip.
+            (recentData.next || playlistData.next) ? "partial" : "complete",
+            recentData.cursors?.after || playlistData.next || null,
+            null
           )
         };
   
