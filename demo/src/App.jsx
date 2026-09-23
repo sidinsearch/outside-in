@@ -75,9 +75,11 @@ export default function App() {
         const code = urlParams.get('code')
         const codeVerifier = localStorage.getItem('spotify_code_verifier')
 
+        // Clear the URL immediately so we don't re-trigger on refresh
+        window.history.replaceState({}, document.title, window.location.pathname)
+
         if (code && codeVerifier) {
           setSpotifyLoading(true)
-          window.history.replaceState({}, document.title, window.location.pathname)
 
           const payload = {
             method: 'POST',
