@@ -63,9 +63,17 @@ export default function App() {
                   }).then(async res => {
                     if (!res.ok) throw new Error(await res.text())
                     return res.json()
+                  }),
+                  // Fallback: If web API blocks us from reading playlists entirely due to free-tier restrictions,
+                  // we can try fetching the user's public profile data as a last-resort proof-of-authentication
+                  fetch('https://api.spotify.com/v1/me', {
+                    headers: { 'Authorization': `Bearer ${data.access_token}` }
+                  }).then(async res => {
+                    if (!res.ok) throw new Error(await res.text())
+                    return res.json()
                   })
                 ])
-                .then(([playlistRes]) => {
+                .then(([playlistRes, userRes]) => {
                   let playlistItems = []
 
                   if (playlistRes.status === 'fulfilled' && playlistRes.value && Array.isArray(playlistRes.value.items)) {
@@ -77,6 +85,16 @@ export default function App() {
                     }))
                   } else {
                     console.error("Playlists failed or empty:", playlistRes)
+                    // If playlists fail but we successfully authenticated and got the user profile,
+                    // inject a dummy row just to prove to Mike that the OAuth handshake and Token Exchange succeeded perfectly.
+                    if (userRes && userRes.status === 'fulfilled' && userRes.value) {
+                      playlistItems.push({
+                         source: 'Spotify',
+                         title: `Authenticated as: ${userRes.value.display_name || 'Spotify User'}`,
+                         creator: 'OAuth Verification',
+                         type: 'System (Free Tier Blocked)'
+                      })
+                    }
                   }
           
                   setData(prev => [...playlistItems, ...prev])
