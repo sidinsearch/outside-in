@@ -30,6 +30,8 @@ export default function App() {
         if (code && codeVerifier) {
           setSpotifyLoading(true)
 
+          // Spotify requires standard Base64 encoding for PKCE (no padding, url safe)
+          // The fetch payload must perfectly match what was generated in handleSpotifyLogin
           const payload = new URLSearchParams()
           payload.append('client_id', SPOTIFY_CLIENT_ID)
           payload.append('grant_type', 'authorization_code')
@@ -40,9 +42,9 @@ export default function App() {
           fetch('https://accounts.spotify.com/api/token', {
             method: 'POST',
             headers: {
-              'Content-Type': 'application/x-www-form-urlencoded',
+              'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: payload,
+            body: payload.toString() // Explicitly convert to string here
           })
             .then(res => {
               if (!res.ok) {
