@@ -158,7 +158,7 @@ export default function App() {
                     })
                   }
           
-                  setData(prev => [...playlistItems, ...likedItems, ...recentItems, 
+                  setData(prev => [...playlistItems, ...likedItems, ...recentItems, ...prev])
                   setSpotifyLoading(false)
                   
                   if (playlistItems.length === 0) {

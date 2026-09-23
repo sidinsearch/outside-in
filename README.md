@@ -14,8 +14,8 @@ The traditional backend approach fails because:
 
 We propose two distinct architectures depending on the final deployment target.
 
-### 1. Pure Web SPA (OAuth PKCE) - *Included in Demo*
-A purely client-side React application using the Proof Key for Code Exchange (PKCE) flow.
+### 1. Pure Web SPA (OAuth PKCE & Implicit) - *Included in Demo*
+A purely client-side React application. Uses Proof Key for Code Exchange (PKCE) for Spotify, and Implicit Grant (Data Portability) for YouTube.
 - No backend server is involved in the token exchange.
 - Tokens are fetched directly to the user's browser via their own IP.
 - Data is requested from the official APIs natively by the client.
@@ -26,8 +26,10 @@ sequenceDiagram
     participant App as SPA (Browser)
     participant SpotAuth as accounts.spotify.com
     participant SpotAPI as api.spotify.com
+    participant GoogAuth as accounts.google.com
+    participant YTAPI as youtube.googleapis.com
 
-    User->>App: Clicks "Import"
+    User->>App: Clicks "Import from Spotify"
     App->>SpotAuth: Redirects with PKCE Challenge
     SpotAuth-->>User: Prompts for Login/Consent
     User->>SpotAuth: Approves
@@ -36,6 +38,14 @@ sequenceDiagram
     SpotAuth-->>App: Returns Access Token
     App->>SpotAPI: GET /me/playlists & /me/tracks
     SpotAPI-->>App: Returns JSON Data
+
+    User->>App: Clicks "Import from YouTube"
+    App->>GoogAuth: Implicit Grant OAuth Popup
+    GoogAuth-->>User: Prompts for Login/Consent
+    User->>GoogAuth: Approves
+    GoogAuth-->>App: Returns Access Token directly
+    App->>YTAPI: GET /youtube/v3/playlists & videos
+    YTAPI-->>App: Returns JSON Data
 ```
 
 **Limitations:** Requires the App Owner to have an approved API key. Due to [Spotify's 2026 API changes](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide#premium-requirement), the developer account must have an active Premium subscription to fetch music data, otherwise it returns a 403 Forbidden error.
@@ -47,16 +57,16 @@ If SuperBrain is deployed as an Android/iOS App (React Native) or Desktop App (E
 sequenceDiagram
     participant App as SuperBrain (Native App)
     participant Web as Hidden WebView
-    participant SpotAuth as accounts.spotify.com
-    participant SpotApp as open.spotify.com
+    participant Auth as accounts.spotify.com / accounts.google.com
+    participant Platform as open.spotify.com / youtube.com
     participant DB as SuperBrain Backend
 
     App->>Web: 1. Launch Hidden WebView
-    Web->>SpotAuth: 2. Navigate to Login Page
-    SpotAuth-->>Web: User logs in (Auth Cookies Set)
-    Web->>SpotApp: 3. Redirect to Web Player
+    Web->>Auth: 2. Navigate to Login Page
+    Auth-->>Web: User logs in (Auth Cookies Set)
+    Web->>Platform: 3. Redirect to Web Player / YT Home
     App->>Web: 4. evaluateJavascript() injects scraper script
-    Web->>Web: 5. Script reads Redux State / internal undocumented API
+    Web->>Web: 5. Script reads internal state (Redux/ytcfg)
     Web-->>App: 6. JavascriptInterface Bridge passes JSON data back
     App->>DB: 7. Securely push structured data
 ```
