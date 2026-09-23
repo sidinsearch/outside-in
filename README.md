@@ -1,31 +1,77 @@
-# SuperBrain Spotify Connector
+# SuperBrain Outside-In Adapters
 
-An "outside-in" TypeScript adapter that extracts a user's recent listening history from Spotify without relying on enterprise backend API tiers.
+This repository contains two parts:
+1. **`/src`**: The raw, isolated TypeScript `ConnectorAdapter` modules for Spotify and YouTube, built exactly to the backend Trigger.dev specification provided in `REPS-Spotify-Connector-Spec.pdf`.
+2. **`/demo`**: A complete, client-side React Web App built to visually demonstrate the OAuth flow and data extraction to Mike without requiring a backend.
 
-This module implements the exact `ConnectorAdapter` interface required by SuperBrain.
+---
 
-## How it works
+## 1. The Connector Adapters (`/src`)
 
-1. It takes an authorized Spotify session token (provided by the SuperBrain frontend/client).
-2. It hits the Spotify API directly using an injected `fetchImpl`.
-3. It maps the payload to the exact `CandidateItem` schema enforcing:
-   - Valid, credential-free URLs.
-   - Clean handling of empty responses (`empty_verified`).
-   - Honest `CoverageReport`s to prevent false-positives when paginating or handling errors.
+These are raw TypeScript modules. They take an injected `fetchImpl`, securely hit the platform APIs using a user session, and return strongly-typed `ListCandidatesResult` payloads enforcing strict URL building and `CoverageReport` honesty.
 
-## Testing
+**Features:**
+- **Spotify (`src/spotifyConnector.ts`)**: Concurrently fetches "Recently Played Tracks" and "Saved Playlists".
+- **YouTube (`src/youtubeConnector.ts`)**: Concurrently fetches "Liked Videos" and "Saved Playlists". (Note: Direct "Watch History" is gated behind Google Data Portability archives, so Liked/Playlists are used as the closest available automated proxy).
 
-Tests are written using `vitest` and execute entirely offline by mocking `fetchImpl`, exactly as requested.
-
+### Running Tests
+Unit tests use `vitest` with mocked network calls (no live tokens required).
 ```bash
 npm install
 npm run test
 ```
 
-## Caveats & Notes on Approach
+---
 
-**TOS & Rate Limits:** Because this is an outside-in implementation utilizing a client-side token mapped to a regular Spotify Web API application, you are subject to the standard Web API quota limits (429 errors). If this scales massively, Spotify may detect unusual traffic patterns from a single developer Client ID unless the token generation is highly decentralized or properly distributed.
+## 2. The Visual Demo App (`/demo`)
 
-**Pagination:** The Spotify API uses `cursors.after`. This adapter returns `partial` in the CoverageReport when `next` is present.
+A Vite + React application that simulates how this architecture looks from the user's perspective during onboarding. 
 
-**Podcast Limitation:** Spotify's `recently-played` API explicitly returns tracks, not podcasts, at this time. If podcast extraction is strictly necessary, it will require either polling the Web Player's internal undocumented GraphQL endpoints (brittle and risky) or relying on the user's explicit GDPR data export.
+### Why this architecture?
+1. **Free API Usage:** By authenticating on the client side, the requests are made on behalf of the user, completely bypassing the need for an enterprise server API tier.
+2. **Maximum Privacy:** Passwords are typed into the official Spotify/Google popups. Tokens are held in browser memory, never hit the SuperBrain backend, and die when the tab closes.
+
+### How It Works
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Browser (React App)
+    participant OAuth (Spotify/Google)
+    participant SuperBrain DB
+
+    User->>Browser: Click Import
+    Browser->>OAuth: Redirect/Popup for Login
+    OAuth-->>User: Ask for Consent
+    User->>OAuth: Approves
+    OAuth-->>Browser: Return Access Token
+    Browser->>OAuth: Fetch Playlists/History via API
+    OAuth-->>Browser: Raw JSON Data
+    Browser->>Browser: Transform to SuperBrain Schema
+    Browser->>SuperBrain DB: POST clean Data (Tokens stay in Browser)
+```
+
+### Setup & Deployment for Mike (Render)
+
+Host the `/demo` folder on **Render** as a Static Site to share it.
+
+1. **Get Client IDs:**
+   - **Spotify:** Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard) -> Create App -> Add Redirect URI (your Render URL or `http://localhost:5173`).
+   - **YouTube:** Go to [Google Cloud Console](https://console.cloud.google.com/) -> APIs & Services -> Credentials -> Create OAuth client ID (Web application) -> Add Authorized JS Origins & Redirect URIs.
+
+2. **Deploy on Render.com:**
+   - Connect your GitHub repo to a New **Static Site** on Render.
+   - **Root Directory:** `demo` (Make sure you set this so Render builds the demo app!)
+   - **Build Command:** `npm run build`
+   - **Publish Directory:** `dist`
+   - **Environment Variables:**
+     - `VITE_SPOTIFY_CLIENT_ID` = `your_spotify_id`
+     - `VITE_GOOGLE_CLIENT_ID` = `your_google_id`
+
+3. **Local Testing:**
+   ```bash
+   cd demo
+   npm install
+   # Add your Client IDs to demo/.env
+   npm run dev
+   ```
