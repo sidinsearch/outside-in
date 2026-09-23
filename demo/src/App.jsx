@@ -77,14 +77,20 @@ export default function App() {
                       throw new Error("Playlist fetch failed")
                     }
                     return res.json()
-                  }).catch(e => ({ items: [] })) 
+                  }).catch(e => ({ items: [] })),
+                  fetch('https://api.spotify.com/v1/me/tracks?limit=20', {
+                    headers: { 'Authorization': `Bearer ${data.access_token}` }
+                  }).then(async res => {
+                    if (!res.ok) throw new Error("Liked songs fetch failed")
+                    return res.json()
+                  }).catch(e => ({ items: [] }))
                 ])
-                .then(([recentData, playlistData]) => {
+                .then(([recentData, playlistData, likedData]) => {
                   const recentItems = recentData.items?.map(item => ({
                     source: 'Spotify',
                     title: item.track?.name || 'Unknown Track',
                     creator: item.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
-                    type: 'Track'
+                    type: 'Recently Played'
                   })) || []
                   
                   const playlistItems = playlistData.items?.map(item => ({
@@ -93,12 +99,19 @@ export default function App() {
                     creator: item.owner?.display_name || 'Unknown Owner',
                     type: 'Playlist'
                   })) || []
+
+                  const likedItems = likedData.items?.map(item => ({
+                    source: 'Spotify',
+                    title: item.track?.name || 'Unknown Track',
+                    creator: item.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
+                    type: 'Liked Song'
+                  })) || []
           
-                  setData(prev => [...playlistItems, ...recentItems, ...prev])
+                  setData(prev => [...playlistItems, ...likedItems, ...recentItems, ...prev])
                   setSpotifyLoading(false)
                   
-                  if (recentItems.length === 0 && playlistItems.length === 0) {
-                     alert("Data fetched successfully, but your Spotify account has no public playlists or recent history.")
+                  if (recentItems.length === 0 && playlistItems.length === 0 && likedItems.length === 0) {
+                     alert("Data fetched successfully, but your Spotify account has no public playlists, liked songs, or recent history.")
                   }
                 })
                 .catch(e => {
@@ -148,7 +161,7 @@ export default function App() {
     
     localStorage.setItem('spotify_code_verifier', codeVerifier)
     
-    const scope = 'user-read-recently-played playlist-read-private playlist-read-collaborative'
+    const scope = 'user-read-recently-played playlist-read-private playlist-read-collaborative user-library-read'
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge_method=S256&code_challenge=${codeChallenge}`
     
     window.location.href = authUrl
