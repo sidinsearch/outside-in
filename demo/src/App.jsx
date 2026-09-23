@@ -30,21 +30,20 @@ export default function App() {
         if (code && codeVerifier) {
           setSpotifyLoading(true)
 
-          const payload = {
+          const payload = new URLSearchParams()
+          payload.append('client_id', SPOTIFY_CLIENT_ID)
+          payload.append('grant_type', 'authorization_code')
+          payload.append('code', code)
+          payload.append('redirect_uri', REDIRECT_URI)
+          payload.append('code_verifier', codeVerifier)
+
+          fetch('https://accounts.spotify.com/api/token', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',
             },
-            body: new URLSearchParams({
-              client_id: SPOTIFY_CLIENT_ID,
-              grant_type: 'authorization_code',
-              code,
-              redirect_uri: REDIRECT_URI,
-              code_verifier: codeVerifier,
-            }),
-          }
-
-          fetch('https://accounts.spotify.com/api/token', payload)
+            body: payload,
+          })
             .then(res => {
               if (!res.ok) {
                 res.text().then(text => console.error("Spotify Token API rejected:", text))
