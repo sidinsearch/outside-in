@@ -69,57 +69,90 @@ export default function App() {
         }
       }
       
-      // Only try to authenticate on load if we have a code in the URL (returning from login)
+      // If there is a code in the URL, process it natively (bypassing strict SDK state checks)
       if (window.location.search.includes('code=')) {
-        handleSpotifyRedirect()
-      } else {
-        // If we don't have a code, just check if we have a cached token via getAccessToken.
-        // We DO NOT call authenticate() here because it will force a redirect.
-        const checkExisting = async () => {
-          try {
-            const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
-              'user-read-recently-played',
-              'playlist-read-private'
-            ])
-            const token = await api.getAccessToken()
-            if (token) {
-              setSpotifyLoading(true)
-              Promise.all([
-                fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
-                  headers: { 'Authorization': `Bearer ${token.access_token}` }
-                }).then(res => res.json()),
-                fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
-                  headers: { 'Authorization': `Bearer ${token.access_token}` }
-                }).then(res => res.json())
-              ])
-              .then(([recentData, playlistData]) => {
-                const recentItems = recentData.items?.map(item => ({
-                  source: 'Spotify',
-                  title: item.track.name,
-                  creator: item.track.artists.map(a => a.name).join(', '),
-                  type: 'Track'
-                })) || []
-                
-                const playlistItems = playlistData.items?.map(item => ({
-                  source: 'Spotify',
-                  title: item.name,
-                  creator: item.owner.display_name,
-                  type: 'Playlist'
-                })) || []
-        
-                setData(prev => [...playlistItems, ...recentItems, ...prev])
-                setSpotifyLoading(false)
-              })
-            }
-          } catch (e) {
-            // Do not log errors aggressively for missing token
-          console.log('No token found on load')
+        const urlParams = new URLSearchParams(window.location.search)
+        const code = urlParams.get('code')
+        const codeVerifier = localStorage.getItem('spotify_code_verifier')
+
+        if (code && codeVerifier) {
+          setSpotifyLoading(true)
+          window.history.replaceState({}, document.title, window.location.pathname)
+
+          const payload = {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: new URLSearchParams({
+              client_id: SPOTIFY_CLIENT_ID,
+              grant_type: 'authorization_code',
+              code,
+              redirect_uri: REDIRECT_URI,
+              code_verifier: codeVerifier,
+            }),
           }
+
+          fetch('https://accounts.spotify.com/api/token', payload)
+            .then(res => res.json())
+            .then(data => {
+              if (data.access_token) {
+                // Fetch data using token
+                Promise.all([
+                  fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
+                    headers: { 'Authorization': `Bearer ${data.access_token}` }
+                  }).then(res => res.json()),
+                  fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
+                    headers: { 'Authorization': `Bearer ${data.access_token}` }
+                  }).then(res => res.json())
+                ])
+                .then(([recentData, playlistData]) => {
+                  const recentItems = recentData.items?.map(item => ({
+                    source: 'Spotify',
+                    title: item.track.name,
+                    creator: item.track.artists.map(a => a.name).join(', '),
+                    type: 'Track'
+                  })) || []
+                  
+                  const playlistItems = playlistData.items?.map(item => ({
+                    source: 'Spotify',
+                    title: item.name,
+                    creator: item.owner.display_name,
+                    type: 'Playlist'
+                  })) || []
+          
+                  setData(prev => [...playlistItems, ...recentItems, ...prev])
+                  setSpotifyLoading(false)
+                })
+              } else {
+                setSpotifyLoading(false)
+              }
+            })
+            .catch(e => setSpotifyLoading(false))
         }
-        checkExisting()
       }
     }
   }, [])
+
+  // Basic PKCE generator for manual fallback
+  const generateRandomString = (length) => {
+    let text = ''
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
+    for (let i = 0; i < length; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length))
+    }
+    return text
+  }
+
+  const generateCodeChallenge = async (codeVerifier) => {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(codeVerifier)
+    const digest = await window.crypto.subtle.digest('SHA-256', data)
+    return btoa(String.fromCharCode.apply(null, [...new Uint8Array(digest)]))
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '')
+  }
 
   const handleSpotifyLogin = async () => {
     if (SPOTIFY_CLIENT_ID === 'YOUR_SPOTIFY_CLIENT_ID') {
@@ -127,22 +160,16 @@ export default function App() {
       return
     }
     
-    try {
-      const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
-        'user-read-recently-played',
-        'playlist-read-private'
-      ])
-      
-      // Clear any potentially corrupted state first
-      localStorage.removeItem(`spotify-sdk:AuthorizationCodeWithPKCEStrategy:token`)
-      localStorage.removeItem(`spotify-sdk:verifier`)
-      
-      await api.authenticate()
-    } catch (err) {
-      console.error("Spotify Auth Error:", err)
-      // Fallback: manually trigger standard PKCE flow if SDK wrapper fails
-      window.location.href = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent('user-read-recently-played playlist-read-private')}&code_challenge_method=S256&code_challenge=xyz`
-    }
+    // Bypass the wrapper entirely to avoid local state corruption
+    const codeVerifier = generateRandomString(128)
+    const codeChallenge = await generateCodeChallenge(codeVerifier)
+    
+    localStorage.setItem('spotify_code_verifier', codeVerifier)
+    
+    const scope = 'user-read-recently-played playlist-read-private'
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge_method=S256&code_challenge=${codeChallenge}`
+    
+    window.location.href = authUrl
   }
 
   // --- YOUTUBE LOGIC ---
