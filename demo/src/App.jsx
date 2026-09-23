@@ -5,6 +5,7 @@ import { useGoogleLogin } from '@react-oauth/google'
 export default function App() {
   const [data, setData] = useState([])
   const [spotifyLoading, setSpotifyLoading] = useState(false)
+  const [spotifyPremiumError, setSpotifyPremiumError] = useState(false)
   const [youtubeLoading, setYoutubeLoading] = useState(false)
 
   // Removed obsolete Render environment variables since we are using localStorage injection now
@@ -66,6 +67,7 @@ export default function App() {
               if (data.access_token) {
                 // Clear the URL immediately on success
                 window.history.replaceState({}, document.title, window.location.pathname)
+                setSpotifyPremiumError(false)
                 
                 let jwtEmail = "Unknown User"
                 if (data.id_token) {
@@ -82,6 +84,21 @@ export default function App() {
                   fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(async res => {
+                    if (res.status === 403) throw new Error("403_PREMIUM")
+                    if (!res.ok) throw new Error(await res.text())
+                    return res.json()
+                  }),
+                  fetch('https://api.spotify.com/v1/me/tracks?limit=50', {
+                    headers: { 'Authorization': `Bearer ${data.access_token}` }
+                  }).then(async res => {
+                    if (res.status === 403) throw new Error("403_PREMIUM")
+                    if (!res.ok) throw new Error(await res.text())
+                    return res.json()
+                  }),
+                  fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
+                    headers: { 'Authorization': `Bearer ${data.access_token}` }
+                  }).then(async res => {
+                    if (res.status === 403) throw new Error("403_PREMIUM")
                     if (!res.ok) throw new Error(await res.text())
                     return res.json()
                   }),
@@ -92,8 +109,17 @@ export default function App() {
                     return res.json()
                   })
                 ])
-                .then(([playlistRes, userRes]) => {
+                .then(([playlistRes, likedRes, recentRes, userRes]) => {
                   let playlistItems = []
+                  let likedItems = []
+                  let recentItems = []
+                  let isPremiumBlocked = false
+
+                  // Check if any endpoint threw the Premium 403 error
+                  if (playlistRes.reason?.message === "403_PREMIUM" || likedRes.reason?.message === "403_PREMIUM" || recentRes.reason?.message === "403_PREMIUM") {
+                     isPremiumBlocked = true
+                     setSpotifyPremiumError(true)
+                  }
 
                   if (playlistRes.status === 'fulfilled' && playlistRes.value && Array.isArray(playlistRes.value.items)) {
                     playlistItems = playlistRes.value.items.map(item => ({
@@ -102,10 +128,28 @@ export default function App() {
                       creator: item?.owner?.display_name || 'Unknown Owner',
                       type: 'Playlist'
                     }))
-                  } else {
-                    console.error("Playlists failed or empty:", playlistRes)
-                    // If playlists fail but we successfully authenticated,
-                    // inject a dummy row just to prove to Mike that the OAuth handshake and Token Exchange succeeded perfectly.
+                  }
+
+                  if (likedRes.status === 'fulfilled' && likedRes.value && Array.isArray(likedRes.value.items)) {
+                    likedItems = likedRes.value.items.map(item => ({
+                      source: 'Spotify',
+                      title: item?.track?.name || 'Unknown Track',
+                      creator: item?.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
+                      type: 'Liked Song'
+                    }))
+                  }
+
+                  if (recentRes.status === 'fulfilled' && recentRes.value && Array.isArray(recentRes.value.items)) {
+                    recentItems = recentRes.value.items.map(item => ({
+                      source: 'Spotify',
+                      title: item?.track?.name || 'Unknown Track',
+                      creator: item?.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
+                      type: 'Recently Played'
+                    }))
+                  }
+                  
+                  if (isPremiumBlocked) {
+                    // Add the base auth verification so the table isn't entirely empty
                     playlistItems.push({
                        source: 'Spotify',
                        title: `Authenticated: ${userRes?.value?.display_name || userRes?.value?.email || jwtEmail}`,
@@ -114,7 +158,7 @@ export default function App() {
                     })
                   }
           
-                  setData(prev => [...playlistItems, ...prev])
+                  setData(prev => [...playlistItems, ...likedItems, ...recentItems, 
                   setSpotifyLoading(false)
                   
                   if (playlistItems.length === 0) {
@@ -169,7 +213,7 @@ export default function App() {
     
     localStorage.setItem('spotify_code_verifier', codeVerifier)
     
-    const scope = 'user-read-email user-read-private'
+    const scope = 'user-read-email user-read-private playlist-read-private playlist-read-collaborative user-library-read user-read-recently-played'
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${spotifyClientId}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge_method=S256&code_challenge=${codeChallenge}`
     
     window.location.href = authUrl
@@ -279,14 +323,31 @@ export default function App() {
           Configure API Keys for Demo
         </button>
 
+
         <div className="bg-gray-800/50 p-4 rounded-lg mb-8 border border-gray-700">
-            <h3 className="text-sm font-bold text-white mb-2">Demo Instructions for Mike:</h3>
-            <ol className="text-sm text-gray-400 space-y-2 list-decimal list-inside">
-              <li>Click <strong>Configure API Keys</strong> above and paste your own Client IDs.</li>
-              <li>Keys are stored purely in your browser's <code>localStorage</code>. They are never sent to a backend.</li>
-              <li><strong>Important Spotify Note:</strong> Due to Spotify's 2026 Developer Policy, if the Developer Account that generated the Client ID does not have an active <strong>Premium Subscription</strong> on file, Spotify blocks the API from reading <em>any</em> user playlists or history, throwing a 403 error. The end-user logging in does not need Premium, but the Developer Account must have it.</li>
-            </ol>
+          <h3 className="text-sm font-bold text-white mb-2">Demo Instructions:</h3>
+          <ol className="text-sm text-gray-400 space-y-2 list-decimal list-inside">
+            <li>Click <strong>Configure API Keys</strong> above and paste your Client IDs.</li>
+            <li>Keys are stored purely in your browser's <code>localStorage</code>.</li>
+          </ol>
+        </div>
+
+        {spotifyPremiumError && (
+          <div className="bg-red-900/40 border border-red-500 text-red-200 p-5 rounded-lg mb-8">
+            <h3 className="font-bold text-red-100 flex items-center gap-2 mb-3">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+              Developer Account Premium Required
+            </h3>
+            <p className="text-sm mb-3">
+              Spotify successfully authenticated you, but returning a <strong>403 Forbidden</strong> error when fetching your playlists and library. 
+              According to Spotify's Web API policy, the Developer Account that owns this Client ID must have an active Premium subscription.
+            </p>
+            <a href="https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide#premium-requirement" target="_blank" rel="noreferrer" className="text-sm font-bold text-red-400 underline hover:text-red-200">
+              Read official Spotify documentation here
+            </a>
           </div>
+        )}
+
 
           <div className="space-y-4">
           <button 

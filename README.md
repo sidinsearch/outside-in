@@ -1,12 +1,12 @@
 # SuperBrain - Outside-In Content Import
 
 ## The Problem
-Mike requested a way to import users' Spotify, YouTube, and Goodreads data into SuperBrain during onboarding. 
+Stakeholders requested a secure, scalable way to import users' Spotify, YouTube, and Goodreads data into the platform during onboarding. 
 
 The traditional backend approach fails because:
 1. **API Quotas:** Spotify limits backend server applications to 250,000 users.
-2. **Security:** Mike explicitly forbade storing user passwords or scraping from a centralized server due to IP-ban risks and privacy liability.
-3. **Approval Walls:** Enterprise APIs require manual human review and force developer accounts to maintain active Premium billing subscriptions to even access the endpoints.
+2. **Security:** Storing user passwords or scraping from a centralized server introduces severe IP-ban risks and privacy liability.
+3. **Approval Walls:** Enterprise APIs require manual human review and force developer accounts to maintain active Premium billing subscriptions to access endpoints.
 
 ---
 
@@ -20,7 +20,25 @@ A purely client-side React application using the Proof Key for Code Exchange (PK
 - Tokens are fetched directly to the user's browser via their own IP.
 - Data is requested from the official APIs natively by the client.
 
-**Limitations:** Still requires the App Owner to have an approved API key and, in Spotify's case, an active Premium subscription to fetch music data without 403 errors.
+```mermaid
+sequenceDiagram
+    participant User
+    participant App as SPA (Browser)
+    participant SpotAuth as accounts.spotify.com
+    participant SpotAPI as api.spotify.com
+
+    User->>App: Clicks "Import"
+    App->>SpotAuth: Redirects with PKCE Challenge
+    SpotAuth-->>User: Prompts for Login/Consent
+    User->>SpotAuth: Approves
+    SpotAuth->>App: Redirects back with Auth Code
+    App->>SpotAuth: POST /api/token (Code + Verifier)
+    SpotAuth-->>App: Returns Access Token
+    App->>SpotAPI: GET /me/playlists & /me/tracks
+    SpotAPI-->>App: Returns JSON Data
+```
+
+**Limitations:** Requires the App Owner to have an approved API key. Due to [Spotify's 2026 API changes](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide#premium-requirement), the developer account must have an active Premium subscription to fetch music data, otherwise it returns a 403 Forbidden error.
 
 ### 2. Native Mobile/Desktop Wrapper (WebView Injection) - *Recommended for Production*
 If SuperBrain is deployed as an Android/iOS App (React Native) or Desktop App (Electron), we can entirely bypass the official enterprise APIs and their billing constraints.
@@ -60,7 +78,7 @@ You can run the Pure Web SPA architecture right now.
 3. Paste your Client IDs. (They are saved safely to your local browser storage; they are never sent to a backend).
 4. Click Import.
 
-**Important Note on Spotify APIs:** Due to Spotify's 2026 Developer Policy, if the Developer Account that generated the Client ID does not have an active *Premium Subscription*, the API throws a 403 error on all playlist reads. The demo UI catches this and gracefully injects your profile verification to prove the OAuth handshake succeeded despite the API block.
+**Important Note on Spotify APIs:** Due to [Spotify's 2026 Developer Policy](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide#premium-requirement), if the Developer Account that generated the Client ID does not have an active *Premium Subscription*, the API throws a 403 error on all playlist reads. The demo UI catches this and gracefully displays an exact warning with the official documentation link.
 
 ---
 
