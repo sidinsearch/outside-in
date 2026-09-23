@@ -7,7 +7,11 @@ export default function App() {
   const [youtubeLoading, setYoutubeLoading] = useState(false)
 
   const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'YOUR_SPOTIFY_CLIENT_ID'
-  const REDIRECT_URI = window.location.origin + window.location.pathname
+  
+  // Note: Render URLs don't have trailing slashes naturally, but Spotify often expects exact matches.
+  // Using window.location.origin to ensure it matches exactly what was registered.
+  const REDIRECT_URI = window.location.origin
+
 
   // --- SPOTIFY LOGIC ---
   useEffect(() => {
@@ -62,6 +66,7 @@ export default function App() {
       return
     }
     const scope = 'user-read-recently-played playlist-read-private'
+    // Switched to Implicit Grant token flow (response_type=token) for client-side only 
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}`
     window.location.href = authUrl
   }
