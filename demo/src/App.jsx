@@ -75,8 +75,8 @@ export default function App() {
         const code = urlParams.get('code')
         const codeVerifier = localStorage.getItem('spotify_code_verifier')
 
-        // Clear the URL immediately so we don't re-trigger on refresh
-        window.history.replaceState({}, document.title, window.location.pathname)
+        // DO NOT clear the URL here. Wait until the fetch succeeds.
+        // window.history.replaceState({}, document.title, window.location.pathname)
 
         if (code && codeVerifier) {
           setSpotifyLoading(true)
@@ -99,6 +99,9 @@ export default function App() {
             .then(res => res.json())
             .then(data => {
               if (data.access_token) {
+                // Clear the URL immediately on success so we don't re-trigger on refresh
+                window.history.replaceState({}, document.title, window.location.pathname)
+                
                 // Fetch data using token
                 Promise.all([
                   fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
@@ -152,12 +155,9 @@ export default function App() {
 
   // Basic PKCE generator for manual fallback
   const generateRandomString = (length) => {
-    let text = ''
     const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
-    for (let i = 0; i < length; i++) {
-      text += possible.charAt(Math.floor(Math.random() * possible.length))
-    }
-    return text
+    const values = crypto.getRandomValues(new Uint8Array(length))
+    return values.reduce((acc, x) => acc + possible[x % possible.length], "")
   }
 
   const generateCodeChallenge = async (codeVerifier) => {
