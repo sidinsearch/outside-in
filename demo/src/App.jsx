@@ -87,13 +87,15 @@ export default function App() {
                     console.error("Playlists failed or empty:", playlistRes)
                     // If playlists fail but we successfully authenticated and got the user profile,
                     // inject a dummy row just to prove to Mike that the OAuth handshake and Token Exchange succeeded perfectly.
-                    if (userRes && userRes.status === 'fulfilled' && userRes.value) {
+                    if (userRes && userRes.status === 'fulfilled' && userRes.value && !userRes.value.error) {
                       playlistItems.push({
                          source: 'Spotify',
-                         title: `Authenticated as: ${userRes.value.display_name || 'Spotify User'}`,
+                         title: `Authenticated as: ${userRes.value.display_name || userRes.value.email || 'Spotify User'}`,
                          creator: 'OAuth Verification',
-                         type: 'System (Free Tier Blocked)'
+                         type: 'System (Free Tier API Blocked)'
                       })
+                    } else {
+                      console.error("User profile fallback also failed:", userRes)
                     }
                   }
           
@@ -151,9 +153,7 @@ export default function App() {
     
     localStorage.setItem('spotify_code_verifier', codeVerifier)
     
-          // We use the `user-read-recently-played` (which ironically blocks Free users sometimes if strictly requested)
-          // and fallback scopes. Note: Free tier accounts cannot pull `user-read-recently-played` or `user-library-read` if the API limits them.
-          const scope = 'playlist-read-private playlist-read-collaborative'
+          const scope = 'user-read-email user-read-private'
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge_method=S256&code_challenge=${codeChallenge}`
     
     window.location.href = authUrl
