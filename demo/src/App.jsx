@@ -23,21 +23,21 @@ export default function App() {
             'playlist-read-private'
           ])
           
-          // This will throw an error if no token is present in the URL/Storage,
-          // but if we are returning from auth, it will succeed and give us an access token.
-          const token = await api.getAccessToken()
+          // This processes the redirect code automatically if it's in the URL,
+          // or returns an existing valid token from localStorage.
+          const { access_token } = await api.authenticate()
           
-          if (token) {
-            // Clear URL hash
+          if (access_token) {
+            // Clear URL code so it doesn't try to re-authenticate on refresh
             window.history.replaceState({}, document.title, window.location.pathname)
             setSpotifyLoading(true)
             
             Promise.all([
               fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
-                headers: { 'Authorization': `Bearer ${token.access_token}` }
+                headers: { 'Authorization': `Bearer ${access_token}` }
               }).then(res => res.json()),
               fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
-                headers: { 'Authorization': `Bearer ${token.access_token}` }
+                headers: { 'Authorization': `Bearer ${access_token}` }
               }).then(res => res.json())
             ])
             .then(([recentData, playlistData]) => {
@@ -72,23 +72,33 @@ export default function App() {
       // If there is a code in the URL, process it
       if (window.location.search.includes('code=')) {
         handleSpotifyRedirect()
+      } else {
+        // Also check if we already have a cached token in local storage that the SDK saved
+        handleSpotifyRedirect().catch(() => {/* ignore if no token */})
       }
     }
   }, [])
 
-  const handleSpotifyLogin = () => {
+  const handleSpotifyLogin = async () => {
     if (SPOTIFY_CLIENT_ID === 'YOUR_SPOTIFY_CLIENT_ID') {
       alert("Missing VITE_SPOTIFY_CLIENT_ID in .env")
       return
     }
     
-    // Use the official SDK to trigger the PKCE Code flow
     const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
       'user-read-recently-played',
       'playlist-read-private'
     ])
     
-    api.authenticate()
+    // Check if we already have a valid token without redirecting
+    const token = await api.getAccessToken()
+    if (token) {
+      // If we do, just reload to trigger the useEffect
+      window.location.reload()
+    } else {
+      // If we don't, trigger the redirect
+      api.authenticate()
+    }
   }
 
   // --- YOUTUBE LOGIC ---
