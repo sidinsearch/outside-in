@@ -46,7 +46,7 @@ export default function App() {
           })
             .then(res => {
               if (!res.ok) {
-                res.text().then(text => console.error("Spotify Token API rejected:", text))
+                res.text().then(text => alert("Spotify Token API rejected: " + text))
                 throw new Error("Token API rejected request")
               }
               return res.json()
@@ -63,26 +63,26 @@ export default function App() {
                   }).then(res => {
                     if (!res.ok) throw new Error("Recent fetch failed")
                     return res.json()
-                  }),
+                  }).catch(e => ({ items: [] })), // Graceful degradation if user has no recent songs
                   fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(res => {
                     if (!res.ok) throw new Error("Playlist fetch failed")
                     return res.json()
-                  })
+                  }).catch(e => ({ items: [] })) // Graceful degradation
                 ])
                 .then(([recentData, playlistData]) => {
                   const recentItems = recentData.items?.map(item => ({
                     source: 'Spotify',
-                    title: item.track.name,
-                    creator: item.track.artists.map(a => a.name).join(', '),
+                    title: item.track?.name || 'Unknown Track',
+                    creator: item.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
                     type: 'Track'
                   })) || []
                   
                   const playlistItems = playlistData.items?.map(item => ({
                     source: 'Spotify',
-                    title: item.name,
-                    creator: item.owner.display_name,
+                    title: item.name || 'Unnamed Playlist',
+                    creator: item.owner?.display_name || 'Unknown Owner',
                     type: 'Playlist'
                   })) || []
           
@@ -90,16 +90,16 @@ export default function App() {
                   setSpotifyLoading(false)
                 })
                 .catch(e => {
-                  console.error("Data fetch error:", e)
+                  alert("Data fetch error: " + e.message)
                   setSpotifyLoading(false)
                 })
               } else {
-                console.error("Token error:", data)
+                alert("Token error: No access token received.")
                 setSpotifyLoading(false)
               }
             })
             .catch(e => {
-              console.error("Token network error:", e)
+              // The error is already alerted above if it was an API rejection
               setSpotifyLoading(false)
             })
         }
