@@ -30,14 +30,14 @@ export default function App() {
         if (code && codeVerifier) {
           setSpotifyLoading(true)
 
-          // Spotify requires standard Base64 encoding for PKCE (no padding, url safe)
-          // The fetch payload must perfectly match what was generated in handleSpotifyLogin
           const payload = new URLSearchParams()
           payload.append('client_id', SPOTIFY_CLIENT_ID)
           payload.append('grant_type', 'authorization_code')
           payload.append('code', code)
           payload.append('redirect_uri', REDIRECT_URI)
           payload.append('code_verifier', codeVerifier)
+          
+          console.log("Sending token payload...", payload.toString())
 
           fetch('https://accounts.spotify.com/api/token', {
             method: 'POST',
@@ -48,12 +48,16 @@ export default function App() {
           })
             .then(res => {
               if (!res.ok) {
-                res.text().then(text => alert("Spotify Token API rejected: " + text))
+                res.text().then(text => {
+                  alert("Spotify Token API rejected: " + text)
+                  setSpotifyLoading(false)
+                })
                 throw new Error("Token API rejected request")
               }
               return res.json()
             })
             .then(data => {
+              console.log("Token response received:", data)
               if (data.access_token) {
                 // Clear the URL immediately on success so we don't re-trigger on refresh
                 window.history.replaceState({}, document.title, window.location.pathname)
@@ -65,15 +69,18 @@ export default function App() {
                   }).then(res => {
                     if (!res.ok) throw new Error("Recent fetch failed")
                     return res.json()
-                  }).catch(e => ({ items: [] })), // Graceful degradation if user has no recent songs
+                  }).catch(e => { console.log("No recent songs"); return { items: [] } }), // Graceful degradation if user has no recent songs
                   fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(res => {
                     if (!res.ok) throw new Error("Playlist fetch failed")
                     return res.json()
-                  }).catch(e => ({ items: [] })) // Graceful degradation
+                  }).catch(e => { console.log("No playlists"); return { items: [] } }) // Graceful degradation
                 ])
                 .then(([recentData, playlistData]) => {
+                  console.log("Recent data:", recentData)
+                  console.log("Playlist data:", playlistData)
+                  
                   const recentItems = recentData.items?.map(item => ({
                     source: 'Spotify',
                     title: item.track?.name || 'Unknown Track',
@@ -88,6 +95,7 @@ export default function App() {
                     type: 'Playlist'
                   })) || []
           
+                  console.log("Setting final data array:", [...playlistItems, ...recentItems])
                   setData(prev => [...playlistItems, ...recentItems, ...prev])
                   setSpotifyLoading(false)
                 })
@@ -101,7 +109,7 @@ export default function App() {
               }
             })
             .catch(e => {
-              // The error is already alerted above if it was an API rejection
+              console.error("Fetch block caught error:", e)
               setSpotifyLoading(false)
             })
         }
