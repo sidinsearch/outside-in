@@ -306,8 +306,9 @@ export default function App() {
   }
 
   return (
-    <div className="flex w-full h-full relative">
-      {renderConfigOverlay()}
+    <GoogleOAuthProvider clientId={googleClientId || '249182249330-bjd3rilnsokh19463u3ra8ekojkb3q34.apps.googleusercontent.com'}>
+      <div className="flex w-full h-full relative">
+        {renderConfigOverlay()}
       {/* LEFT HALF */}
       <div className="w-1/2 p-12 flex flex-col justify-center border-r border-gray-800">
         <h1 className="text-4xl font-bold mb-4">SuperBrain Onboarding</h1>
@@ -411,5 +412,6 @@ export default function App() {
         </div>
       </div>
     </div>
+    </GoogleOAuthProvider>
   )
 }
