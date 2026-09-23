@@ -94,6 +94,11 @@ You can run the Pure Web SPA architecture right now.
 
 **Important Note on Spotify APIs:** Due to [Spotify's 2026 Developer Policy](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide#premium-requirement), if the Developer Account that generated the Client ID does not have an active *Premium Subscription*, the API throws a 403 error on all playlist reads. The demo UI catches this and gracefully displays an exact warning with the official documentation link.
 
+
+
+https://github.com/user-attachments/assets/3097f0ed-7e36-4ba5-97e9-f6ead19674ce
+
+
 ---
 
 ## Repository Structure
