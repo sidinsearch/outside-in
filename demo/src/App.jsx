@@ -360,8 +360,11 @@ export default function App() {
 
           <button 
             onClick={() => {
-              if (import.meta.env.VITE_GOOGLE_CLIENT_ID) handleYoutubeLogin()
-              else alert("Missing VITE_GOOGLE_CLIENT_ID in .env")
+              if (googleClientId || localStorage.getItem('demo_google_client_id')) {
+                handleYoutubeLogin()
+              } else {
+                handleYoutubeLogin() // Will fallback to the default in main.jsx
+              }
             }}
             disabled={youtubeLoading}
             className="w-full bg-[#FF0000] hover:bg-[#ff3333] text-white font-bold py-4 px-6 rounded-lg transition flex items-center justify-center disabled:opacity-50"
