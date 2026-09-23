@@ -112,7 +112,8 @@ export default function App() {
               })
             }
           } catch (e) {
-            // ignore
+            // Do not log errors aggressively for missing token
+          console.log('No token found on load')
           }
         }
         checkExisting()
