@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useGoogleLogin } from '@react-oauth/google'
+import { SpotifyApi } from '@spotify/web-api-ts-sdk'
 
 export default function App() {
   const [data, setData] = useState([])
@@ -12,51 +13,66 @@ export default function App() {
   // Using window.location.origin to ensure it matches exactly what was registered.
   const REDIRECT_URI = window.location.origin
 
-
   // --- SPOTIFY LOGIC ---
   useEffect(() => {
-    const hash = window.location.hash.substring(1).split('&').reduce((acc, item) => {
-      if (item) {
-        const parts = item.split('=')
-        acc[parts[0]] = decodeURIComponent(parts[1])
-      }
-      return acc
-    }, {})
-
-    if (hash.access_token) {
-      window.history.replaceState({}, document.title, window.location.pathname)
-      setSpotifyLoading(true)
+    if (SPOTIFY_CLIENT_ID !== 'YOUR_SPOTIFY_CLIENT_ID') {
+      const handleSpotifyRedirect = async () => {
+        try {
+          const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
+            'user-read-recently-played',
+            'playlist-read-private'
+          ])
+          
+          // This will throw an error if no token is present in the URL/Storage,
+          // but if we are returning from auth, it will succeed and give us an access token.
+          const token = await api.getAccessToken()
+          
+          if (token) {
+            // Clear URL hash
+            window.history.replaceState({}, document.title, window.location.pathname)
+            setSpotifyLoading(true)
+            
+            Promise.all([
+              fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
+                headers: { 'Authorization': `Bearer ${token.access_token}` }
+              }).then(res => res.json()),
+              fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
+                headers: { 'Authorization': `Bearer ${token.access_token}` }
+              }).then(res => res.json())
+            ])
+            .then(([recentData, playlistData]) => {
+              const recentItems = recentData.items?.map(item => ({
+                source: 'Spotify',
+                title: item.track.name,
+                creator: item.track.artists.map(a => a.name).join(', '),
+                type: 'Track'
+              })) || []
+              
+              const playlistItems = playlistData.items?.map(item => ({
+                source: 'Spotify',
+                title: item.name,
+                creator: item.owner.display_name,
+                type: 'Playlist'
+              })) || []
       
-      Promise.all([
-        fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
-          headers: { 'Authorization': `Bearer ${hash.access_token}` }
-        }).then(res => res.json()),
-        fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
-          headers: { 'Authorization': `Bearer ${hash.access_token}` }
-        }).then(res => res.json())
-      ])
-      .then(([recentData, playlistData]) => {
-        const recentItems = recentData.items?.map(item => ({
-          source: 'Spotify',
-          title: item.track.name,
-          creator: item.track.artists.map(a => a.name).join(', '),
-          type: 'Track'
-        })) || []
-        
-        const playlistItems = playlistData.items?.map(item => ({
-          source: 'Spotify',
-          title: item.name,
-          creator: item.owner.display_name,
-          type: 'Playlist'
-        })) || []
-
-        setData(prev => [...playlistItems, ...recentItems, ...prev])
-        setSpotifyLoading(false)
-      })
-      .catch(err => {
-        console.error(err)
-        setSpotifyLoading(false)
-      })
+              setData(prev => [...playlistItems, ...recentItems, ...prev])
+              setSpotifyLoading(false)
+            })
+            .catch(err => {
+              console.error(err)
+              setSpotifyLoading(false)
+            })
+          }
+        } catch (error) {
+          // Normal behavior when the page first loads and no token exists
+          console.log("Not logged into Spotify yet.");
+        }
+      }
+      
+      // If there is a code in the URL, process it
+      if (window.location.search.includes('code=')) {
+        handleSpotifyRedirect()
+      }
     }
   }, [])
 
@@ -65,10 +81,14 @@ export default function App() {
       alert("Missing VITE_SPOTIFY_CLIENT_ID in .env")
       return
     }
-    const scope = 'user-read-recently-played playlist-read-private'
-    // Switched to Implicit Grant token flow (response_type=token) for client-side only 
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=token&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}`
-    window.location.href = authUrl
+    
+    // Use the official SDK to trigger the PKCE Code flow
+    const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
+      'user-read-recently-played',
+      'playlist-read-private'
+    ])
+    
+    api.authenticate()
   }
 
   // --- YOUTUBE LOGIC ---
