@@ -57,61 +57,69 @@ export default function App() {
                 window.history.replaceState({}, document.title, window.location.pathname)
                 
                 // Fetch data using token
-                Promise.all([
+                Promise.allSettled([
                   fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(async res => {
-                    if (!res.ok) {
-                      const errText = await res.text()
-                      console.log("Recent fetch failed with:", res.status, errText)
-                      throw new Error("Recent fetch failed")
-                    }
+                    if (!res.ok) throw new Error(await res.text())
                     return res.json()
-                  }).catch(e => ({ items: [] })), 
+                  }),
                   fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(async res => {
-                    if (!res.ok) {
-                      const errText = await res.text()
-                      console.log("Playlist fetch failed with:", res.status, errText)
-                      throw new Error("Playlist fetch failed")
-                    }
+                    if (!res.ok) throw new Error(await res.text())
                     return res.json()
-                  }).catch(e => ({ items: [] })),
+                  }),
                   fetch('https://api.spotify.com/v1/me/tracks?limit=20', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(async res => {
-                    if (!res.ok) throw new Error("Liked songs fetch failed")
+                    if (!res.ok) throw new Error(await res.text())
                     return res.json()
-                  }).catch(e => ({ items: [] }))
+                  })
                 ])
-                .then(([recentData, playlistData, likedData]) => {
-                  const recentItems = recentData.items?.map(item => ({
-                    source: 'Spotify',
-                    title: item.track?.name || 'Unknown Track',
-                    creator: item.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
-                    type: 'Recently Played'
-                  })) || []
-                  
-                  const playlistItems = playlistData.items?.map(item => ({
-                    source: 'Spotify',
-                    title: item.name || 'Unnamed Playlist',
-                    creator: item.owner?.display_name || 'Unknown Owner',
-                    type: 'Playlist'
-                  })) || []
+                .then(([recentRes, playlistRes, likedRes]) => {
+                  let recentItems = []
+                  let playlistItems = []
+                  let likedItems = []
 
-                  const likedItems = likedData.items?.map(item => ({
-                    source: 'Spotify',
-                    title: item.track?.name || 'Unknown Track',
-                    creator: item.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
-                    type: 'Liked Song'
-                  })) || []
+                  if (recentRes.status === 'fulfilled' && recentRes.value.items) {
+                    recentItems = recentRes.value.items.map(item => ({
+                      source: 'Spotify',
+                      title: item.track?.name || 'Unknown Track',
+                      creator: item.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
+                      type: 'Recently Played'
+                    }))
+                  } else {
+                    console.error("Recent failed:", recentRes.reason)
+                  }
+                  
+                  if (playlistRes.status === 'fulfilled' && playlistRes.value.items) {
+                    playlistItems = playlistRes.value.items.map(item => ({
+                      source: 'Spotify',
+                      title: item.name || 'Unnamed Playlist',
+                      creator: item.owner?.display_name || 'Unknown Owner',
+                      type: 'Playlist'
+                    }))
+                  } else {
+                    console.error("Playlists failed:", playlistRes.reason)
+                  }
+
+                  if (likedRes.status === 'fulfilled' && likedRes.value.items) {
+                    likedItems = likedRes.value.items.map(item => ({
+                      source: 'Spotify',
+                      title: item.track?.name || 'Unknown Track',
+                      creator: item.track?.artists?.map(a => a.name).join(', ') || 'Unknown Artist',
+                      type: 'Liked Song'
+                    }))
+                  } else {
+                    console.error("Liked failed:", likedRes.reason)
+                  }
           
                   setData(prev => [...playlistItems, ...likedItems, ...recentItems, ...prev])
                   setSpotifyLoading(false)
                   
                   if (recentItems.length === 0 && playlistItems.length === 0 && likedItems.length === 0) {
-                     alert("Data fetched successfully, but your Spotify account has no public playlists, liked songs, or recent history.")
+                     alert("Data fetched, but arrays were empty. Scopes may not be applied to your account yet, or you are testing against a different account than the one logged into the browser.")
                   }
                 })
                 .catch(e => {
