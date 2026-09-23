@@ -1,5 +1,7 @@
 # SuperBrain - Outside-In Content Import
 
+[![Live Demo](https://img.shields.io/badge/Live_Demo-superbrain--outside--in.onrender.com-blue?style=for-the-badge&logo=render)](https://superbrain-outside-in.onrender.com/)
+
 ## The Problem
 Stakeholders requested a secure, scalable way to import users' Spotify, YouTube, and Goodreads data into the platform during onboarding. 
 
@@ -82,6 +84,8 @@ sequenceDiagram
 ## Demo Instructions
 
 You can run the Pure Web SPA architecture right now.
+
+**👉 [Launch Live Demo](https://superbrain-outside-in.onrender.com/)**
 
 1. Visit the deployed demo on Render.
 2. Click **Configure API Keys** on the UI.
