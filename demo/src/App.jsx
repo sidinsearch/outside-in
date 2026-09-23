@@ -7,10 +7,21 @@ export default function App() {
   const [spotifyLoading, setSpotifyLoading] = useState(false)
   const [youtubeLoading, setYoutubeLoading] = useState(false)
 
-  const SPOTIFY_CLIENT_ID = import.meta.env.VITE_SPOTIFY_CLIENT_ID || 'YOUR_SPOTIFY_CLIENT_ID'
-  
-  // Note: Render URLs don't have trailing slashes naturally, but Spotify often expects exact matches.
-  // Using window.location.origin to ensure it matches exactly what was registered.
+  // Removed obsolete Render environment variables since we are using localStorage injection now
+  const [spotifyClientId, setSpotifyClientId] = useState(import.meta.env.VITE_SPOTIFY_CLIENT_ID || localStorage.getItem('demo_spotify_client_id') || '')
+  const [googleClientId, setGoogleClientId] = useState(import.meta.env.VITE_GOOGLE_CLIENT_ID || localStorage.getItem('demo_google_client_id') || '')
+  const [showConfig, setShowConfig] = useState(false)
+
+  // Save to local storage when changed so it persists across redirects
+  useEffect(() => {
+    if (spotifyClientId && spotifyClientId !== import.meta.env.VITE_SPOTIFY_CLIENT_ID) {
+      localStorage.setItem('demo_spotify_client_id', spotifyClientId)
+    }
+    if (googleClientId && googleClientId !== import.meta.env.VITE_GOOGLE_CLIENT_ID) {
+      localStorage.setItem('demo_google_client_id', googleClientId)
+    }
+  }, [spotifyClientId, googleClientId])
+
   const REDIRECT_URI = window.location.origin
 
   // --- SPOTIFY LOGIC ---
@@ -24,11 +35,11 @@ export default function App() {
         const code = urlParams.get('code')
         const codeVerifier = localStorage.getItem('spotify_code_verifier')
 
-        if (code && codeVerifier) {
+        if (code && codeVerifier && spotifyClientId) {
           setSpotifyLoading(true)
 
           const payload = new URLSearchParams()
-          payload.append('client_id', SPOTIFY_CLIENT_ID)
+          payload.append('client_id', spotifyClientId)
           payload.append('grant_type', 'authorization_code')
           payload.append('code', code)
           payload.append('redirect_uri', REDIRECT_URI)
@@ -146,8 +157,9 @@ export default function App() {
   }
 
   const handleSpotifyLogin = async () => {
-    if (SPOTIFY_CLIENT_ID === 'YOUR_SPOTIFY_CLIENT_ID') {
-      alert("Missing VITE_SPOTIFY_CLIENT_ID in .env")
+    if (!spotifyClientId) {
+      alert("Please configure your Spotify Client ID first.")
+      setShowConfig(true)
       return
     }
     
@@ -157,8 +169,8 @@ export default function App() {
     
     localStorage.setItem('spotify_code_verifier', codeVerifier)
     
-          const scope = 'user-read-email user-read-private'
-    const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge_method=S256&code_challenge=${codeChallenge}`
+    const scope = 'user-read-email user-read-private'
+    const authUrl = `https://accounts.spotify.com/authorize?client_id=${spotifyClientId}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge_method=S256&code_challenge=${codeChallenge}`
     
     window.location.href = authUrl
   }
@@ -176,21 +188,21 @@ export default function App() {
         }).then(res => res.json())
       ])
       .then(([playlistData, likedData]) => {
-        const playlistItems = playlistData.items?.map(item => ({
+        const playlists = playlistData.items?.map(item => ({
           source: 'YouTube',
           title: item.snippet.title,
           creator: item.snippet.channelTitle,
           type: 'Playlist'
         })) || []
         
-        const likedItems = likedData.items?.map(item => ({
+        const liked = likedData.items?.map(item => ({
           source: 'YouTube',
           title: item.snippet.title,
           creator: item.snippet.channelTitle,
           type: 'Video (Liked)'
         })) || []
 
-        setData(prev => [...playlistItems, ...likedItems, ...prev])
+        setData(prev => [...playlists, ...liked, ...prev])
         setYoutubeLoading(false)
       })
       .catch(err => {
@@ -198,20 +210,85 @@ export default function App() {
         setYoutubeLoading(false)
       })
     },
-    onError: (error) => console.log('Login Failed', error),
+    onError: error => console.log('Login Failed', error),
     scope: 'https://www.googleapis.com/auth/youtube.readonly'
   })
 
+  // We need to inject the Google Client ID into the provider dynamically if it wasn't hardcoded.
+  // We'll export a wrapper component instead.
+
+  const renderConfigOverlay = () => {
+    if (!showConfig) return null;
+    return (
+      <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+        <div className="bg-gray-900 p-8 rounded-lg border border-gray-700 w-full max-w-lg">
+          <h2 className="text-2xl font-bold mb-6">Demo Configuration</h2>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1">Spotify Client ID</label>
+              <input 
+                type="text" 
+                value={spotifyClientId}
+                onChange={e => setSpotifyClientId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded p-3 text-white focus:outline-none focus:border-green-500"
+                placeholder="Paste Spotify Client ID here"
+              />
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-400 mb-1">Google Client ID</label>
+              <input 
+                type="text" 
+                value={googleClientId}
+                onChange={e => setGoogleClientId(e.target.value)}
+                className="w-full bg-gray-800 border border-gray-700 rounded p-3 text-white focus:outline-none focus:border-red-500"
+                placeholder="Paste Google Client ID here"
+              />
+            </div>
+          </div>
+          
+          <div className="mt-8 flex justify-end gap-3">
+            <button 
+              onClick={() => setShowConfig(false)}
+              className="bg-white text-black px-6 py-2 rounded font-bold hover:bg-gray-200"
+            >
+              Save & Close
+            </button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="flex w-full h-full">
+    <div className="flex w-full h-full relative">
+      {renderConfigOverlay()}
       {/* LEFT HALF */}
       <div className="w-1/2 p-12 flex flex-col justify-center border-r border-gray-800">
         <h1 className="text-4xl font-bold mb-4">SuperBrain Onboarding</h1>
-        <p className="text-gray-400 mb-8">
+        <p className="text-gray-400 mb-4">
           This is a REAL client-side authentication flow. We fetch your Spotify and YouTube data directly to your browser. Passwords are never sent to a backend.
         </p>
+          
+        <button 
+          onClick={() => setShowConfig(true)}
+          className="mb-8 text-sm font-bold text-blue-400 hover:text-blue-300 underline text-left flex items-center gap-2"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+          Configure API Keys for Demo
+        </button>
 
-        <div className="space-y-4">
+        <div className="bg-gray-800/50 p-4 rounded-lg mb-8 border border-gray-700">
+            <h3 className="text-sm font-bold text-white mb-2">Demo Instructions for Mike:</h3>
+            <ol className="text-sm text-gray-400 space-y-2 list-decimal list-inside">
+              <li>Click <strong>Configure API Keys</strong> above and paste your own Client IDs.</li>
+              <li>Keys are stored purely in your browser's <code>localStorage</code>. They are never sent to a backend.</li>
+              <li><strong>Important Spotify Note:</strong> Due to Spotify's 2026 Developer Policy, if the Developer Account that generated the Client ID does not have an active <strong>Premium Subscription</strong> on file, Spotify blocks the API from reading <em>any</em> user playlists or history, throwing a 403 error. The end-user logging in does not need Premium, but the Developer Account must have it.</li>
+            </ol>
+          </div>
+
+          <div className="space-y-4">
           <button 
             onClick={handleSpotifyLogin}
             disabled={spotifyLoading}
