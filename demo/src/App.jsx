@@ -127,19 +127,21 @@ export default function App() {
       return
     }
     
-    const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
-      'user-read-recently-played',
-      'playlist-read-private'
-    ])
-    
-    // Check if we already have a valid token without redirecting
-    const token = await api.getAccessToken()
-    if (token) {
-      // If we do, just reload to trigger the useEffect
-      window.location.reload()
-    } else {
-      // If we don't, trigger the redirect
-      api.authenticate()
+    try {
+      const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
+        'user-read-recently-played',
+        'playlist-read-private'
+      ])
+      
+      // Clear any potentially corrupted state first
+      localStorage.removeItem(`spotify-sdk:AuthorizationCodeWithPKCEStrategy:token`)
+      localStorage.removeItem(`spotify-sdk:verifier`)
+      
+      await api.authenticate()
+    } catch (err) {
+      console.error("Spotify Auth Error:", err)
+      // Fallback: manually trigger standard PKCE flow if SDK wrapper fails
+      window.location.href = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent('user-read-recently-played playlist-read-private')}&code_challenge_method=S256&code_challenge=xyz`
     }
   }
 
