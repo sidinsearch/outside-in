@@ -24,9 +24,6 @@ export default function App() {
         const code = urlParams.get('code')
         const codeVerifier = localStorage.getItem('spotify_code_verifier')
 
-        // DO NOT clear the URL here. Wait until the fetch succeeds.
-        // window.history.replaceState({}, document.title, window.location.pathname)
-
         if (code && codeVerifier) {
           setSpotifyLoading(true)
 
@@ -36,15 +33,13 @@ export default function App() {
           payload.append('code', code)
           payload.append('redirect_uri', REDIRECT_URI)
           payload.append('code_verifier', codeVerifier)
-          
-          console.log("Sending token payload...", payload.toString())
 
           fetch('https://accounts.spotify.com/api/token', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded'
             },
-            body: payload.toString() // Explicitly convert to string here
+            body: payload.toString() 
           })
             .then(res => {
               if (!res.ok) {
@@ -57,30 +52,34 @@ export default function App() {
               return res.json()
             })
             .then(data => {
-              console.log("Token response received:", data)
               if (data.access_token) {
-                // Clear the URL immediately on success so we don't re-trigger on refresh
+                // Clear the URL immediately on success
                 window.history.replaceState({}, document.title, window.location.pathname)
                 
                 // Fetch data using token
                 Promise.all([
                   fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
-                  }).then(res => {
-                    if (!res.ok) throw new Error("Recent fetch failed")
+                  }).then(async res => {
+                    if (!res.ok) {
+                      const errText = await res.text()
+                      console.log("Recent fetch failed with:", res.status, errText)
+                      throw new Error("Recent fetch failed")
+                    }
                     return res.json()
-                  }).catch(e => { console.log("No recent songs"); return { items: [] } }), // Graceful degradation if user has no recent songs
+                  }).catch(e => ({ items: [] })), 
                   fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
-                  }).then(res => {
-                    if (!res.ok) throw new Error("Playlist fetch failed")
+                  }).then(async res => {
+                    if (!res.ok) {
+                      const errText = await res.text()
+                      console.log("Playlist fetch failed with:", res.status, errText)
+                      throw new Error("Playlist fetch failed")
+                    }
                     return res.json()
-                  }).catch(e => { console.log("No playlists"); return { items: [] } }) // Graceful degradation
+                  }).catch(e => ({ items: [] })) 
                 ])
                 .then(([recentData, playlistData]) => {
-                  console.log("Recent data:", recentData)
-                  console.log("Playlist data:", playlistData)
-                  
                   const recentItems = recentData.items?.map(item => ({
                     source: 'Spotify',
                     title: item.track?.name || 'Unknown Track',
@@ -95,9 +94,12 @@ export default function App() {
                     type: 'Playlist'
                   })) || []
           
-                  console.log("Setting final data array:", [...playlistItems, ...recentItems])
                   setData(prev => [...playlistItems, ...recentItems, ...prev])
                   setSpotifyLoading(false)
+                  
+                  if (recentItems.length === 0 && playlistItems.length === 0) {
+                     alert("Data fetched successfully, but your Spotify account has no public playlists or recent history.")
+                  }
                 })
                 .catch(e => {
                   alert("Data fetch error: " + e.message)
