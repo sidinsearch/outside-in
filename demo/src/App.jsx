@@ -169,7 +169,9 @@ export default function App() {
     
     localStorage.setItem('spotify_code_verifier', codeVerifier)
     
-    const scope = 'user-read-recently-played playlist-read-private playlist-read-collaborative user-library-read'
+          // We use the `user-read-recently-played` (which ironically blocks Free users sometimes if strictly requested)
+          // and fallback scopes. Note: Free tier accounts cannot pull `user-read-recently-played` or `user-library-read` if the API limits them.
+          const scope = 'playlist-read-private playlist-read-collaborative'
     const authUrl = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=code&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=${encodeURIComponent(scope)}&code_challenge_method=S256&code_challenge=${codeChallenge}`
     
     window.location.href = authUrl
