@@ -96,7 +96,13 @@ export default function App() {
           }
 
           fetch('https://accounts.spotify.com/api/token', payload)
-            .then(res => res.json())
+            .then(res => {
+              if (!res.ok) {
+                res.text().then(text => console.error("Spotify Token API rejected:", text))
+                throw new Error("Token API rejected request")
+              }
+              return res.json()
+            })
             .then(data => {
               if (data.access_token) {
                 // Clear the URL immediately on success so we don't re-trigger on refresh
