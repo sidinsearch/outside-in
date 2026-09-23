@@ -101,10 +101,16 @@ export default function App() {
                 Promise.all([
                   fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
-                  }).then(res => res.json()),
+                  }).then(res => {
+                    if (!res.ok) throw new Error("Recent fetch failed")
+                    return res.json()
+                  }),
                   fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
-                  }).then(res => res.json())
+                  }).then(res => {
+                    if (!res.ok) throw new Error("Playlist fetch failed")
+                    return res.json()
+                  })
                 ])
                 .then(([recentData, playlistData]) => {
                   const recentItems = recentData.items?.map(item => ({
@@ -124,11 +130,19 @@ export default function App() {
                   setData(prev => [...playlistItems, ...recentItems, ...prev])
                   setSpotifyLoading(false)
                 })
+                .catch(e => {
+                  console.error("Data fetch error:", e)
+                  setSpotifyLoading(false)
+                })
               } else {
+                console.error("Token error:", data)
                 setSpotifyLoading(false)
               }
             })
-            .catch(e => setSpotifyLoading(false))
+            .catch(e => {
+              console.error("Token network error:", e)
+              setSpotifyLoading(false)
+            })
         }
       }
     }
