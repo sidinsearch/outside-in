@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { useGoogleLogin } from '@react-oauth/google'
-import { SpotifyApi } from '@spotify/web-api-ts-sdk'
+// Removed official Spotify SDK due to local cache conflicts with React router
 
 export default function App() {
   const [data, setData] = useState([])
@@ -16,58 +16,7 @@ export default function App() {
   // --- SPOTIFY LOGIC ---
   useEffect(() => {
     if (SPOTIFY_CLIENT_ID !== 'YOUR_SPOTIFY_CLIENT_ID') {
-      const handleSpotifyRedirect = async () => {
-        try {
-          const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
-            'user-read-recently-played',
-            'playlist-read-private'
-          ])
-          
-          // This processes the redirect code automatically if it's in the URL,
-          // or returns an existing valid token from localStorage.
-          const { access_token } = await api.authenticate()
-          
-          if (access_token) {
-            // Clear URL code so it doesn't try to re-authenticate on refresh
-            window.history.replaceState({}, document.title, window.location.pathname)
-            setSpotifyLoading(true)
-            
-            Promise.all([
-              fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
-                headers: { 'Authorization': `Bearer ${access_token}` }
-              }).then(res => res.json()),
-              fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
-                headers: { 'Authorization': `Bearer ${access_token}` }
-              }).then(res => res.json())
-            ])
-            .then(([recentData, playlistData]) => {
-              const recentItems = recentData.items?.map(item => ({
-                source: 'Spotify',
-                title: item.track.name,
-                creator: item.track.artists.map(a => a.name).join(', '),
-                type: 'Track'
-              })) || []
-              
-              const playlistItems = playlistData.items?.map(item => ({
-                source: 'Spotify',
-                title: item.name,
-                creator: item.owner.display_name,
-                type: 'Playlist'
-              })) || []
-      
-              setData(prev => [...playlistItems, ...recentItems, ...prev])
-              setSpotifyLoading(false)
-            })
-            .catch(err => {
-              console.error(err)
-              setSpotifyLoading(false)
-            })
-          }
-        } catch (error) {
-          // Normal behavior when the page first loads and no token exists
-          console.log("Not logged into Spotify yet.");
-        }
-      }
+// Dead code removed
       
       // If there is a code in the URL, process it natively (bypassing strict SDK state checks)
       if (window.location.search.includes('code=')) {
