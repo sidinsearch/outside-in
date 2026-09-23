@@ -64,6 +64,7 @@ export default function App() {
                     if (!res.ok) throw new Error(await res.text())
                     return res.json()
                   }),
+                  // For free users, the 'playlists' endpoint includes both playlists you created AND playlists you saved/followed to your library.
                   fetch('https://api.spotify.com/v1/me/playlists?limit=50', {
                     headers: { 'Authorization': `Bearer ${data.access_token}` }
                   }).then(async res => {
