@@ -69,12 +69,53 @@ export default function App() {
         }
       }
       
-      // If there is a code in the URL, process it
+      // Only try to authenticate on load if we have a code in the URL (returning from login)
       if (window.location.search.includes('code=')) {
         handleSpotifyRedirect()
       } else {
-        // Also check if we already have a cached token in local storage that the SDK saved
-        handleSpotifyRedirect().catch(() => {/* ignore if no token */})
+        // If we don't have a code, just check if we have a cached token via getAccessToken.
+        // We DO NOT call authenticate() here because it will force a redirect.
+        const checkExisting = async () => {
+          try {
+            const api = SpotifyApi.withUserAuthorization(SPOTIFY_CLIENT_ID, REDIRECT_URI, [
+              'user-read-recently-played',
+              'playlist-read-private'
+            ])
+            const token = await api.getAccessToken()
+            if (token) {
+              setSpotifyLoading(true)
+              Promise.all([
+                fetch('https://api.spotify.com/v1/me/player/recently-played?limit=10', {
+                  headers: { 'Authorization': `Bearer ${token.access_token}` }
+                }).then(res => res.json()),
+                fetch('https://api.spotify.com/v1/me/playlists?limit=10', {
+                  headers: { 'Authorization': `Bearer ${token.access_token}` }
+                }).then(res => res.json())
+              ])
+              .then(([recentData, playlistData]) => {
+                const recentItems = recentData.items?.map(item => ({
+                  source: 'Spotify',
+                  title: item.track.name,
+                  creator: item.track.artists.map(a => a.name).join(', '),
+                  type: 'Track'
+                })) || []
+                
+                const playlistItems = playlistData.items?.map(item => ({
+                  source: 'Spotify',
+                  title: item.name,
+                  creator: item.owner.display_name,
+                  type: 'Playlist'
+                })) || []
+        
+                setData(prev => [...playlistItems, ...recentItems, ...prev])
+                setSpotifyLoading(false)
+              })
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+        checkExisting()
       }
     }
   }, [])
